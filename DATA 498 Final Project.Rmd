@@ -1,0 +1,397 @@
+---
+title: "DATA 498 Final Project"
+author: "Linpeng Sun"
+date: "2021/4/19"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Data cleaning and organizing
+```{r}
+CV <- read.csv("country_vaccinations.csv")
+head(CV)
+```
+ 
+```{r}
+library(tidyverse)
+library(hrbrthemes)
+library(plotly)
+library(patchwork)
+library(babynames)
+library(viridis)
+```
+
+##Making chart
+Area chart
+```{r}
+USA <- CV[which(CV$iso_code=="USA"),]
+#head(USA)
+USA$date <- as.Date(USA$date)
+# plot
+USA %>%
+  ggplot( aes(x=date, y=total_vaccinations)) +
+    geom_area(fill="#69b3a2", alpha=0.5) +
+    geom_line(color="#69b3a2") +
+    ggtitle("Total Vaccinations in United States") +
+    ylab("number of vaccinations") +
+    theme_ipsum()
+```
+
+```{r}
+India <- CV[which(CV$iso_code=="IND"),]
+#head(India)
+India$date <- as.Date(India$date)
+# plot
+India %>%
+  ggplot( aes(x=date, y=total_vaccinations)) +
+    geom_area(fill="#69b3a2", alpha=0.5) +
+    geom_line(color="#69b3a2") +
+    ggtitle("Total Vaccinations in India") +
+    ylab("number of vaccinations") +
+    theme_ipsum()
+```
+
+```{r}
+China <- CV[which(CV$iso_code=="CHN"),]
+#head(China)
+China$date <- as.Date(China$date)
+# plot
+China %>%
+  ggplot( aes(x=date, y=total_vaccinations)) +
+    geom_area(fill="#69b3a2", alpha=0.5) +
+    geom_line(color="#69b3a2") +
+    ggtitle("Total Vaccinations in China") +
+    ylab("number of vaccinations") +
+    theme_ipsum()
+```
+
+Area chart of multi-country
+```{r}
+# Load dataset from CV
+don <- CV %>% 
+  filter(iso_code %in% c("USA", "AUS", "CHN", "RUS")) 
+
+# Plot
+don %>%
+  ggplot( aes(x=date, y=total_vaccinations, group=country, fill=country)) +
+    geom_area() +
+    scale_fill_viridis(discrete = TRUE) +
+    theme(legend.position="none") +
+    ggtitle("Popularity of American names in the previous 30 years") +
+    theme_ipsum() +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(0, "lines"),
+      strip.text.x = element_text(size = 8),
+      plot.title = element_text(size=13)
+    ) +
+    facet_wrap(~country, scale="free_y")
+```
+
+```{r}
+# plot
+don <- CV %>% 
+  filter(iso_code %in% c("USA", "IND", "CHN", "RUS")) 
+don$date <- as.Date(don$date)
+#don %>%
+p <- ggplot(don, aes(x=date, y=daily_vaccinations, group=country, color=country)) +
+    geom_line() +
+    scale_color_viridis(discrete = TRUE) +
+    ggtitle("Daily Vaccination") +
+    ylab("number of vaccinations/day") +
+    xlab("")+
+    theme_ipsum()
+p+scale_x_date(date_labels = "%m-%Y")
+```
+
+World cloud
+```{r}
+# Libraries
+library(tidyverse)
+library(hrbrthemes)
+library(tm)
+library(proustr)
+
+# Load dataset 
+data <- CV[which(CV$date=="2021-05-01"),]
+data = subset(data, select = c(country,total_vaccinations))
+# The wordcloud 2 library is the best option for wordcloud in R
+library(wordcloud2)
+
+# prepare a list of countries
+countries <- data %>%
+  group_by(country) %>%
+  arrange(total_vaccinations) %>%
+  rename(
+    word = country,
+    freq = total_vaccinations
+  ) %>%
+  tail(20)
+
+# Make the plot
+wordcloud2(countries,  minRotation = -pi/2, maxRotation = -pi/2,
+         backgroundColor = "white", color="#69b3a2")
+```
+
+# Analysis
+Use country profile analyzing data
+```{r}
+CP <- read.csv("country_profile_variables.csv")
+CP <- subset(CP, CP$country %in% unique(CV$country))
+CV <- CV[!is.na(CV$total_vaccinations_per_hundred),]
+```
+
+```{r}
+CV <- CV[ order(CV$date , decreasing = TRUE ),]
+CP$total_vaccinations_per_hundred <- CV$total_vaccinations_per_hundred[match(CP$country,CV$country)]
+CP <- na.omit(CP)
+```
+
+```{r}
+lm_1 <- lm(total_vaccinations_per_hundred ~ GDP..Gross.domestic.product..million.current.US.. + Economy..Industry....of.GVA. + GDP.per.capita..current.US.., data = CP)
+summary(lm_1)
+```
+
+```{r}
+CP$Mobile.cellular.subscriptions..per.100.inhabitants <- as.numeric(CP$Mobile.cellular.subscriptions..per.100.inhabitants.)
+CP$Mobile.cellular.subscriptions..per.100.inhabitants..1 <- 
+as.numeric(CP$Mobile.cellular.subscriptions..per.100.inhabitants..1)
+CP$Education..Government.expenditure....of.GDP. <- as.numeric(CP$Education..Government.expenditure....of.GDP.)
+lm_2 <- lm(total_vaccinations_per_hundred ~ Mobile.cellular.subscriptions..per.100.inhabitants. + Education..Government.expenditure....of.GDP., data = CP)
+summary(lm_2)
+```
+
+```{r}
+CP$Health..Physicians..per.1000.pop.. <- as.numeric(CP$Health..Physicians..per.1000.pop..)
+lm_3 <- lm(formula =  total_vaccinations_per_hundred ~ Health..Total.expenditure....of.GDP. + Health..Physicians..per.1000.pop.., data = CP)
+summary(lm_3)
+```
+
+```{r}
+CP$Population.growth.rate..average.annual... <- as.numeric(CP$Population.growth.rate..average.annual...)
+lm_4 <- lm(total_vaccinations_per_hundred ~ Population.density..per.km2..2017.+Population.growth.rate..average.annual..., data = CP)
+summary(lm_4)
+```
+
+##Ridge Regression
+```{r}
+drop <- c("Region", "Labour.force.participation..female.male.pop....", "Life.expectancy.at.birth..females.males..years.", "Population.age.distribution..0.14...60..years....", "International.migrant.stock..000...of.total.pop..", "Education..Primary.gross.enrol..ratio..f.m.per.100.pop..", "Education..Secondary.gross.enrol..ratio..f.m.per.100.pop..", "Education..Tertiary.gross.enrol..ratio..f.m.per.100.pop..", "Forested.area....of.land.area.", "Energy.supply.per.capita..Gigajoules.", "Pop..using.improved.drinking.water..urban.rural....", "Net.Official.Development.Assist..received....of.GNI.")
+CP_2 <- CP[,!(names(CP) %in% drop)]
+CP_2 <- as.data.frame(lapply(CP_2[,-1], as.numeric))
+CP_2 <- CP_2[complete.cases(CP_2), ]
+#CP_2 <- lapply(CP_2[,-1], as.numeric)
+x = model.matrix(total_vaccinations_per_hundred~., data = CP_2)[,-1]
+y = CP_2$total_vaccinations_per_hundred
+```
+
+```{r}
+#Ridge Regression
+library(glmnet)
+grid = 10^seq(10,-2,length = 100)
+ridge.mod = glmnet(x,y, alpha=0,lambda=grid)
+```
+
+```{r}
+# access the ridge regression coefficients
+coef(ridge.mod)
+# 38 x 100 matrix: each row for one predictor, each column for one lambda value
+dim(coef(ridge.mod))
+```
+
+```{r}
+ridge.mod$lambda[50]
+ridge.mod$lambda[60]
+```
+
+```{r}
+coef(ridge.mod)[,50]
+sqrt(sum(coef(ridge.mod)[-1,50]^2))
+sqrt(sum(coef(ridge.mod)[-1,60]^2))
+```
+
+```{r}
+set.seed(1)
+train=sample (1: nrow(x), nrow(x)/2)
+test=(-train)
+y.test=y[test]
+```
+
+```{r}
+ridge.mod=glmnet(x[train ,],y[ train],alpha=0, lambda =grid ,
+thresh =1e-12)
+ridge.pred=predict (ridge.mod ,s=4, newx=x[test ,])
+# test MSE
+mean((ridge.pred -y.test)^2)
+```
+
+```{r}
+# with a very large lambda
+ridge.pred=predict (ridge.mod ,s=1e10 ,newx=x[test ,])
+mean((ridge.pred -y.test)^2)
+```
+
+```{r}
+set.seed(1)
+cv.out=cv.glmnet(x[train ,],y[ train],alpha=0)
+plot(cv.out)
+bestlam =cv.out$lambda.min
+bestlam
+# the value of λ that results in the smallest crossvalidation error is 672.4823
+```
+
+```{r}
+# test MSE associated with λ = 672.4823
+ridge.pred=predict (ridge.mod ,s=bestlam ,newx=x[test ,])
+mean((ridge.pred -y.test)^2)
+```
+
+```{r}
+out=glmnet(x,y,alpha=0)
+predict(out,type="coefficients",s=bestlam) [1:20,]
+```
+
+##LASSO
+```{r}
+lasso.mod=glmnet(x[train ,],y[ train],alpha=1, lambda =grid)
+plot(lasso.mod)
+```
+
+```{r}
+set.seed(1)
+cv.out=cv.glmnet(x[train ,],y[ train],alpha=1)
+plot(cv.out)
+bestlam2=cv.out$lambda.min
+lasso.pred=predict(lasso.mod,s=bestlam2,newx=x[test,])
+mean((lasso.pred-y.test)^2)
+```
+
+```{r}
+out=glmnet(x,y,alpha=1,lambda=grid)
+lasso.coef=predict(out,type="coefficients",s=bestlam)[1:37,]
+lasso.coef 
+```
+
+```{r}
+lasso.coef[lasso.coef!=0]
+```
+
+##Principal Components Regression
+```{r}
+library (pls)
+set.seed(2)
+pcr.fit=pcr(total_vaccinations_per_hundred~.,data=CP_2,scale=TRUE,validation ="CV")
+```
+
+```{r}
+summary (pcr.fit)
+```
+
+```{r}
+validationplot(pcr.fit,val.type="MSEP")
+```
+
+```{r}
+set.seed(1)
+pcr.fit=pcr(total_vaccinations_per_hundred~.,data=CP_2,subset=train,scale=TRUE,validation="CV")
+validationplot(pcr.fit,val.type="MSEP")
+```
+
+```{r}
+pcr.pred=predict(pcr.fit,x[test,],ncomp=25)
+mean((pcr.pred-y.test)^2)
+```
+
+```{r}
+pcr.fit=pcr(y~x,scale=TRUE,ncomp=25)
+summary(pcr.fit)
+```
+
+##Partial Least Squares
+```{r}
+set.seed(1)
+pls.fit=plsr(total_vaccinations_per_hundred~.,data=CP_2,subset=train,scale=TRUE,validation="CV")
+summary(pls.fit)
+```
+
+```{r}
+validationplot(pls.fit,val.type="MSEP")
+```
+
+```{r}
+pls.pred=predict(pls.fit,x[test,],ncomp=1)
+mean((pls.pred-y.test)^2)
+```
+
+```{r}
+pls.fit=plsr(total_vaccinations_per_hundred~.,data=CP_2,scale=TRUE,ncomp=1)
+summary(pls.fit)
+```
+
+##Linear Regression
+```{r}
+lm_5 <- lm(total_vaccinations_per_hundred~.,data=CP_2)
+summary(lm_5)
+```
+
+##Best Subset Selection
+```{r}
+library(leaps)
+regfit.full = regsubsets(total_vaccinations_per_hundred~., CP_2, nvmax=37)
+reg.summary = summary(regfit.full)
+reg.summary$rsq
+```
+
+```{r}
+#plot adjusted R2 and select the best model
+# type=”l” connects the plotted points with lines
+plot(reg.summary$adjr2, xlab="Number of Variables", ylab="RSS", 
+type="l")
+```
+
+```{r}
+# identify the location of a maximum point of a vector
+which.max(reg.summary$adjr2)
+```
+
+```{r}
+# plot a red dot to indicate the model with the largest adjusted R2
+# points() put points on an existing plot without creating a new plot
+points(18, reg.summary$adjr2[11], col="red", cex=2, pch=20)
+```
+
+```{r}
+#plot RSS, adjusted R2, Cp, BIC for all of the models in one picture
+par(mfrow=c(2,2))
+#plot RSS
+plot(reg.summary$rss, xlab="Number of Variables", ylab="RSS", type="l")
+#plot adjusted R2
+plot(reg.summary$adjr2, xlab="Number of Variables", ylab="Adjusted Rsq", 
+type="l")
+which.max(reg.summary$adjr2)
+points(18, reg.summary$adjr2[18], col="red", cex=2, pch=20)
+#plot Cp
+plot(reg.summary$cp, xlab="Number of Variables", ylab="Cp", type="l")
+which.min(reg.summary$cp)
+points(8, reg.summary$cp[8], col="red", cex=2, pch=20)
+#plot bic
+plot(reg.summary$bic, xlab="Number of Variables", ylab="BIC", type="l")
+which.min(reg.summary$bic)
+points(6, reg.summary$bic[6], col="red", cex=2, pch=20)
+```
+
+```{r}
+plot(regfit.full, scale="r2")
+plot(regfit.full, scale="adjr2")
+plot(regfit.full, scae="Cp")
+plot(regfit.full, scale="bic")
+```
+
+```{r}
+coef(regfit.full, 18)
+```
+
